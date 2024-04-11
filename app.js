@@ -1,15 +1,18 @@
-var createError = require('http-errors');
-var express = require('express');
-var path = require('path');
-var cookieParser = require('cookie-parser');
-var logger = require('morgan');
-const dotenv = require('dotenv');
+const createError = require('http-errors');
+const express = require('express');
+const path = require('path');
+const cookieParser = require('cookie-parser');
+const logger = require('morgan');
 
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
+
+const dotenv = require('dotenv');
 dotenv.config();
 
-var indexRouter = require('./src/routes/indexRouter');
-var trainingRouter = require('./src/routes/trainingRouter');
-var saveRouter = require('./src/routes/saveDataRouter');
+const indexRouter = require('./src/routes/indexRouter');
+const trainingRouter = require('./src/routes/trainingRouter');
+const saveRouter = require('./src/routes/saveDataRouter');
 
 var app = express();
 
@@ -22,6 +25,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
+
+
+app.use(session({
+  secret: `${process.env.SESSION_KEY}`,
+  resave: false,
+  saveUninitialized: true,
+  cookie: { maxAge: 3600000 },  // 세션 타임아웃을 1시간으로 설정
+  store: MongoStore.create({
+    mongoUrl: process.env.SESSION_DB_URI,
+  }),
+}));
 
 
 app.use('/', indexRouter);
