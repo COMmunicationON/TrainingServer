@@ -10,9 +10,8 @@ const MongoStore = require('connect-mongo');
 const dotenv = require('dotenv');
 dotenv.config();
 
-const indexRouter = require('./src/routes/indexRouter');
 const trainingRouter = require('./src/routes/trainingRouter');
-const saveRouter = require('./src/routes/saveDataRouter');
+const userRouter = require('./src/routes/userRouter');
 
 var app = express();
 
@@ -38,9 +37,8 @@ app.use(session({
 }));
 
 
-app.use('/', indexRouter);
 app.use('/training', trainingRouter);
-app.use('/saveData', saveRouter);
+app.use('/user', userRouter);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
