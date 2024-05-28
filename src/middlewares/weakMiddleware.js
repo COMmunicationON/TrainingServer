@@ -1,5 +1,7 @@
-const { connectDB, disconnectDB, getData } = require('../controllers/dbController');
+const { connectDB, disconnectDB, getDatas } = require('../controllers/dbController');
 const Weak = require('../models/weakModel');
+const { updatePhonemesScore, saveWrong } = require('./scoresMiddleware');
+const Score = require('../models/scoreModel');
 
 exports.findWeak = async (req, res, next) => {
     // if (!req.query.phoneme) {
@@ -41,7 +43,7 @@ exports.findWeak = async (req, res, next) => {
     } catch (err) {
         // throw로 바꾸기??
         console.error('Error saving scores:', err);
-        res.status(500).send('Failed to get weak data');
+        return res.status(500).send('Failed to get weak data');
     } finally {
         await disconnectDB();
     };
@@ -57,48 +59,44 @@ exports.weakTraining = async (req, res, next) => {
 
     try {
         await connectDB();
-
-        // syllable 데이터와 word 데이터에서 가져오기
         const result = [];
+        const dataTypes = ["syllable", "word", "sentence"];
+        const levels = [1, 2, 3];
+        let cnt = 0;
+        let targetCount;
+        let count = 0;
 
-        // syllable1 데이터 랜덤하게 10개 가져오기
-        console.log("syllable1 데이터 랜덤하게 10개 가져와서 result에 넣기")
-        var datas = await getData("syllable", 1, 30);
-        for (const data of datas) {
-            if (data.phonemes.includes(phoneme)) {
-                data["type"] = "syllable";
-                result.push(data)
-                if (result.length >= 5) {
-                    break;
+        // syllable 데이터 랜덤하게 3개 가져오기
+        await connectDB();
+
+        for (const type of dataTypes) {
+            for (const level of levels) {
+                if (type == "word" && level == 1) {
+                    targetCount = 2;
+                } else {
+                    targetCount = 1;
                 }
-            }
-        }
-
-        // result가 5개가 다 안찼으면 syllable2 데이터 가져오기
-        if (result.length != 5) {
-            datas = await getData("syllable", 2, 30);
-            for (const data of datas) {
-                if (data.phonemes.includes(phoneme)) {
-                    data["type"] = "syllable";
-                    result.push(data);
-                    if (result.length >= 5) {
-                        break;
+                while (cnt < targetCount) {
+                    const datas = await getDatas(type, level, 10);
+                    for (const data of datas) {
+                        //console.log(data);
+                        if (!result.some(item => item.data_id === data.data_id) && data.phonemes.includes(phoneme)) {
+                            data["type"] = type;
+                            data["level"] = level;
+                            result.push(data);
+                            cnt++;
+                            if (cnt >= targetCount) break;
+                        }
                     }
+                    count++;
+                    if (count > 5) break
                 }
             }
         }
 
-        // word1 데이터 랜덤하게 10개 가져오기
-        console.log("word1 데이터 랜덤하게 가져와서 result에 넣기")
-        datas = await getData("word", 1, 20);
-        for (const data of datas) {
-            if (data.phonemes.includes(phoneme)) {
-                data["type"] = "word";
-                result.push(data)
-                if (result.length == 10) {
-                    break;
-                }
-            }
+        // 필요한 데이터가 부족할 경우
+        if (result.length < 10) {
+            console.warn(`Expected ${targetCount} data, but got ${result.length}`);
         }
 
         res.locals.weakData = result;
@@ -106,13 +104,50 @@ exports.weakTraining = async (req, res, next) => {
         next();
 
     } catch (err) {
-        console.error('Error saving scores:', err);
-        res.status(500).send('Failed to get weak data');
+        console.error('Error getting weak datas:', err);
+        return res.status(500).send('Failed to get weak data');
     } finally {
         await disconnectDB();
     }
 };
 
 exports.saveWeakTraining = async (req, res, next) => {
+    // user_id와 type은 실제로 세션에 있는 정보 사용
+    const user_id = "123456789012345678901234";
+    const results = req.body;
 
+    try {
+        await connectDB();
+
+        // 사용자 점수 있는지 확인
+        // Score 객체를 새로 만드는 것보다 findOneAndUpdate() 메소드 사용하는 것이 좋음
+        let score = await Score.findOne({ user_id: user_id });
+        if (!score) {
+            score = new Score({
+                user_id: new mongoose.Types.ObjectId(user_id),
+                syllable_score: [],
+                word_score: [],
+                sentence_score: [],
+                count: {},
+                sum: {}
+            });
+        }
+
+
+        for (const result of results) {
+            // 음운 정보 저장
+            await updatePhonemesScore(user_id, result.each, result.eachAccuracy);
+
+            // 오답 저장
+            if (result.pronunciationScore < 60) {
+                saveWrong(user_id, result.text, result.type, result.level);
+            }
+        }
+        next();
+    } catch (err) {
+        console.error('Error saving weak training data', err);
+        return res.status(400).json({ error: 'Failed saving weak training data' })
+    } finally {
+        await disconnectDB();
+    }
 }

@@ -1,18 +1,20 @@
 const Score = require('../models/scoreModel');
 const mongoose = require('mongoose');
-const { connectDB, disconnectDB } = require('../controllers/dbController');
+const { connectDB, disconnectDB, createModel } = require('../controllers/dbController');
 const Weak = require('../models/weakModel');
 const Wrong = require('../models/wrongModel');
-const Schema = mongoose.Schema;
 
 async function saveScores(req, res, next) {
     // user_id와 type은 실제로 세션에 있는 정보 사용
     const user_id = "123456789012345678901234";
-    const type = req.body.type;
-    const level = req.body.level;
+    const results = req.body;
+
+
+    // const type = req.body.type;
+    // const level = req.body.level;
 
     // 클라이언트에서 전송한 데이터
-    const results = req.body.results;
+    //const results = req.body.results;
 
     try {
         await connectDB();
@@ -36,32 +38,52 @@ async function saveScores(req, res, next) {
         let fluencyTotal = 0;
         let completenessTotal = 0;
         let pronTotal = 0;
+        let level;
+        let type;
 
         for (const result of results) {
-            //console.log(result);
-            for (const nbest of result.NBest) {
-                const pronunAssess = nbest.PronunciationAssessment;
+            accuracyTotal += result.accuracyScore;
+            fluencyTotal += result.fluencyScore;
+            completenessTotal += result.completenessScore;
+            pronTotal += result.pronunciationScore;
+            level = result.level;
+            type = result.type;
 
-                accuracyTotal += pronunAssess.AccuracyScore;
-                fluencyTotal += pronunAssess.FluencyScore;
-                completenessTotal += pronunAssess.CompletenessScore;
-                pronTotal += pronunAssess.PronScore;
-
+            if (result.type == "syllable" || result.type === "word") {
                 // 음운 점수 업데이트
-                for (const word of nbest.Words) {
-                    await saveWeak(user_id, word);
-                }
-
-                // Pronun 점수가 60점 아래인 경우 오답노트에 추가
-                if (nbest.PronunciationAssessment.PronScore < 60) {
-                    await saveWrong(user_id, result.text, type, level);
-                }
+                await updatePhonemesScore(user_id, result.each, result.eachAccuracy);
             }
+
+            // 점수가 60점 아래인 경우 오답노트에 추가
+            if (result.pronunciationScore < 60) {
+                await saveWrong(user_id, result.text, result.type, result.level);
+            }
+
+            //console.log(result);
+            // for (const nbest of result.NBest) {
+            //     const pronunAssess = nbest.PronunciationAssessment;
+
+            //     accuracyTotal += pronunAssess.AccuracyScore;
+            //     fluencyTotal += pronunAssess.FluencyScore;
+            //     completenessTotal += pronunAssess.CompletenessScore;
+            //     pronTotal += pronunAssess.PronScore;
+
+            //     // 음운 점수 업데이트
+            //     for (const word of nbest.Words) {
+            //         await saveWeak(user_id, word);
+            //     }
+
+            //     // Pronun 점수가 60점 아래인 경우 오답노트에 추가
+            //     if (nbest.PronunciationAssessment.PronScore < 60) {
+            //         await saveWrong(user_id, result.text, type, level);
+            //     }
+            // }
         }
 
         // 결과의 평균 계산
 
         const newScore = {
+            level: level,
             accuracy_score: accuracyTotal / 10,
             fluency_score: fluencyTotal / 10,
             completeness_score: completenessTotal / 10,
@@ -92,7 +114,6 @@ async function saveScores(req, res, next) {
 
         res.locals.savedScores = savedScores;  // 결과를 다음 미들웨어로 전달
 
-
         next();  // 다음 미들웨어로 이동
     } catch (err) {
         console.error('Error saving scores:', err);
@@ -102,10 +123,11 @@ async function saveScores(req, res, next) {
     }
 }
 
-const dataSchema = new Schema({
-    data: { type: String, required: true },
-    phonemes: [String],
-});
+// const dataSchema = new Schema({
+//     data: { type: String, required: true },
+//     phonemes: [String],
+// });
+
 
 // 발음 60점 이하인 경우 오답노트에 추가
 async function saveWrong(user_id, text, type, level) {
@@ -121,17 +143,19 @@ async function saveWrong(user_id, text, type, level) {
         }
 
         // 인자에 따라 동적으로 컬렉션 접근
-        const modelName = `${type}${level}`;
-        const collectionName = `${type}${level}`;
-        let DynamicModel;
+        // const modelName = `${type}${level}`;
+        // const collectionName = `${type}${level}`;
+        let DynamicModel = createModel(type, level);
 
         // 해당 컬렉션에 접근하기 위한 모델 생성
         //const DynamicModel = mongoose.model(modelName, dataSchema, collectionName);
-        if (mongoose.models[collectionName]) {
-            DynamicModel = mongoose.model(collectionName);
-        } else {
-            DynamicModel = mongoose.model(modelName, dataSchema, collectionName);
-        }
+        // if (mongoose.models[collectionName]) {
+        //     DynamicModel = mongoose.model(collectionName);
+        // } else {
+        //     DynamicModel = mongoose.model(modelName, dataSchema, collectionName);
+        // }
+
+
 
         try {
             const result = await DynamicModel.findOne({ data: text });
@@ -175,6 +199,40 @@ async function saveWrong(user_id, text, type, level) {
     }
 }
 
+async function updatePhonemesScore(user_id, phonemeArray, accuracyArray) {
+    try {
+        // 해당 유저의 phonemes 정보가 저장되어 있는지 확인
+        let weak = await Weak.findOne({ user_id: user_id });
+        // 유저 정보가 없으면 새로 생성
+        if (!weak) {
+            weak = new Weak({
+                user_id: new mongoose.Types.ObjectId(user_id),
+            });
+        }
+
+        // 해당 키에 대한 정보 업데이트
+        for (let i = 0; i < phonemeArray.length; i++) {
+            const phonemeKey = phonemeArray[i];
+            // 해당 키가 없는 경우 초기화
+            if (!weak.phonemes[phonemeKey]) {
+                weak.phonemes[phonemeKey] = { count: 0, sum: 0 };
+            }
+            weak.phonemes[phonemeKey].count += 1;
+            weak.phonemes[phonemeKey].sum += accuracyArray[i];
+
+            // console.log(`DB phoneme count: ${weak.phonemes[phonemeKey].count}`);
+            // console.log(`DB phoneme sum: ${weak.phonemes[phonemeKey].sum}`);
+
+            // 변경된 phonemes 필드를 명시적으로 표시
+            weak.markModified(`phonemes.${phonemeKey}`);
+        }
+        await weak.save();
+    } catch (err) {
+        console.error('Error saving weaks:', err);
+        throw new Error('Failed to save weaks');
+    }
+}
+
 async function saveWeak(user_id, word) {
     const phonemes = word.Phonemes;
     try {
@@ -213,4 +271,4 @@ async function saveWeak(user_id, word) {
     }
 }
 
-module.exports = { saveScores }
+module.exports = { saveScores, updatePhonemesScore, saveWrong }
