@@ -97,6 +97,9 @@ exports.weakTraining = async (req, res, next) => {
         // 필요한 데이터가 부족할 경우
         if (result.length < 10) {
             console.warn(`Expected ${targetCount} data, but got ${result.length}`);
+            res.locals.less = true;
+        } else {
+            res.locals.less = false;
         }
 
         res.locals.weakData = result;

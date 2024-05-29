@@ -60,7 +60,7 @@ const getDatas = async (type, level, num) => {
                 const originalData = item.data
                 const syllables = dataToSyllables(type, originalData);
                 const phonemes = dataToPhonemes(type, originalData);
-                const phonemeImages = phonemes.map(phoneme => getImagePaths(phoneme));
+                const phonemeImages = phonemes.flatMap(phoneme => getImagePaths(phoneme));
 
                 return {
                     data_id: item._id.toString(),
@@ -115,7 +115,7 @@ const getOneData = async (type, level, id) => {
             const originalData = wrong.data;
             const syllables = dataToSyllables(type, originalData);
             const phonemes = dataToPhonemes(type, originalData);
-            const phonemeImages = phonemes.map(phoneme => getImagePaths(phoneme));
+            const phonemeImages = phonemes.flatMap(phoneme => getImagePaths(phoneme));
 
             const processedData = {
                 data_id: wrong._id.toString(),

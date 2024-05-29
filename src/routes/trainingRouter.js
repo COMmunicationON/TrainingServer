@@ -31,8 +31,12 @@ router.get('/getData', async function (req, res, next) {
 
 // 취약 발음 음운 데이터 가져오기
 router.get('/weakTraining', findWeak, weakTraining, (req, res) => {
-  const { weakData, phoneme, score } = res.locals;
-  res.status(201).json({ message: 'Success', weak_phoneme: phoneme, score: score, datas: weakData });
+  const { weakData, phoneme, score, less } = res.locals;
+  if (less == true) {
+    return res.status(202).json({ message: 'Success', weak_phoneme: phoneme, score: score, datas: weakData });
+  } else {
+    return res.status(201).json({ message: 'Success', weak_phoneme: phoneme, score: score, datas: weakData });
+  }
 });
 
 // 오답노트 데이터 가져오기

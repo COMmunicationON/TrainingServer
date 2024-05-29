@@ -24,9 +24,10 @@ exports.wrongTraining = async (req, res, next) => {
             let id = wrong.data_id;
             let result = await getOneData(wrong.type, wrong.level, wrong.data_id);
             // 결과 객체에 type과 level 정보 추가
-            result["type"] = wrong.type;
-            result["level"] = wrong.level;
-            results.push(result);
+            // result["type"] = wrong.type;
+            // result["level"] = wrong.level;
+            const { data_id, data } = result;
+            results.push({ data_id: data_id, data: data, type: wrong.type, level: wrong.level });
         }
 
         res.locals.wrongs = suffleArray(results);
@@ -51,36 +52,70 @@ function suffleArray(array) {
     return array;
 }
 
-exports.saveWrongTraing = async (req, res, next) => {
-    const user_id = "123456789012345678901234";
-    const results = req.body;
+// exports.saveWrongTraing = async (req, res, next) => {
+//     const user_id = "123456789012345678901234";
+//     const results = req.body;
 
+//     try {
+//         await connectDB();
+//         // 해당 유저의 phonemes 정보가 저장되어 있는지 확인
+//         let wrong = await Wrong.findOne({ user_id: user_id });
+//         // 유저 정보가 없으면 종료
+//         if (!wrong) {
+//             return res.status(400).json({ error: '사용자 오답 정보가 없습니다.' });
+//         }
+//         for (const result of results) {
+//             if (result.pronunciationScore >= 60) {
+//                 let model = createModel(result.type, result.level);
+//                 let data = await model.findOne({ data: result.text });
+//                 await Wrong.updateOne(
+//                     { user_id: user_id },
+//                     { $pull: { wrongs: { data_id: data._id } } }
+//                 )
+
+//                 // let wrong = await Wrong.findOne({ user_id: user_id });
+//                 // wrong.wrongs = wrong.wrongs.filter(item => item.data_id != data._id);
+//                 // await wrong.save();
+//             }
+//         }
+//         next();
+//     } catch (err) {
+//         console.error('Error delete wrong data:', err);
+//         return res.status(400).send({ error: 'Error removing the wrong item' });
+//     } finally {
+//         await disconnectDB();
+//     }
+// }
+
+exports.deleteWrong = async (req, res, next) => {
     try {
-        await connectDB();
-        // 해당 유저의 phonemes 정보가 저장되어 있는지 확인
-        let wrong = await Wrong.findOne({ user_id: user_id });
-        // 유저 정보가 없으면 종료
-        if (!wrong) {
-            return res.status(400).json({ error: '사용자 오답 정보가 없습니다.' });
-        }
-        for (const result of results) {
-            if (result.pronunciationScore >= 60) {
-                let model = createModel(result.type, result.level);
-                let data = await model.findOne({ data: result.text });
-                await Wrong.updateOne(
-                    { user_id: user_id },
-                    { $pull: { wrongs: { data_id: data._id } } }
-                )
+        // user id 임의로 설정
+        const user_id = "123456789012345678901234";
 
-                // let wrong = await Wrong.findOne({ user_id: user_id });
-                // wrong.wrongs = wrong.wrongs.filter(item => item.data_id != data._id);
-                // await wrong.save();
-            }
+        const { data_id } = req.body
+
+        await connectDB();
+
+        let wrong = await Wrong.findOne({ user_id: user_id })
+
+        if (!wrong) {
+            return res.status(404).json({ error: "User not found or no wrong data" });
         }
+
+        // wrongs 배열에서 해당 data_id를 가진 객체 삭제
+        const result = await Wrong.updateOne(
+            { user_id: user_id },
+            { $pull: { wrongs: { data_id: data_id } } }
+        )
+
+        if (result.modifiedCount === 0) {
+            return res.status(404).json({ error: "No wrong data found with the provided data_id." })
+        }
+
         next();
     } catch (err) {
-        console.error('Error delete wrong data:', err);
-        return res.status(400).send({ error: 'Error removing the wrong item' });
+        console.error('Error deleteing wrong data:', err);
+        return res.status(400).json({ error: "Failed" });
     } finally {
         await disconnectDB();
     }
