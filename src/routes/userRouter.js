@@ -15,7 +15,7 @@ router.post('/saveWeaks', saveWeakTraining, (req, res) => {
 })
 
 router.delete('/deleteWrong', deleteWrong, (req, res) => {
-    return res.status(201).json({ message: 'Delete user wrong data succesfully' })
+    return res.status(200).json({ message: 'Delete user wrong data succesfully' })
 })
 
 module.exports = router;

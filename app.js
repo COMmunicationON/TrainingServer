@@ -25,16 +25,20 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
+const sessionStore = MongoStore.create({
+  mongoUrl: process.env.SESSION_DB_URI,
+  collectionName: 'sessions'
+})
 
 app.use(session({
   secret: `${process.env.SESSION_KEY}`,
   resave: false,
-  saveUninitialized: true,
+  saveUninitialized: false,
   cookie: { maxAge: 3600000 },  // 세션 타임아웃을 1시간으로 설정
-  store: MongoStore.create({
-    mongoUrl: process.env.SESSION_DB_URI,
-  }),
+  store: sessionStore
 }));
+
+
 
 
 app.use('/training', trainingRouter);
